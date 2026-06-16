@@ -1,6 +1,36 @@
-/* claude-desk-sidebar — chat + markdown styles (reference snapshot)
- * Excerpt from sena_erp/public/css/sena_ai_sidebar.bundle.css. Uses themed
- * --sena-chat-* vars with Frappe fallbacks. */
+/* claude-desk-sidebar — chat + markdown + history + attachment styles
+ * (reference snapshot). Excerpt from sena_ai_sidebar.bundle.css. Themed via
+ * --sena-chat-* vars (light/dark) with a warm clay accent. */
+
+/* ---- Claude (chat) provider: custom chat UI on the Agent SDK ---- */
+
+/* Light theme — warm eggshell / sandal-white, not pure white. */
+.sena-ai-chat[data-chat-theme="light"] {
+    --sena-chat-bg: #f4efe1;
+    --sena-chat-surface: #fbf7ec;
+    --sena-chat-border: #e4dcc6;
+    --sena-chat-text: #2c2a24;
+    --sena-chat-muted: #6f695b;
+    --sena-chat-input-bg: #fbf7ec;
+    /* Accent for user bubble / send button / links — warm clay, not black.
+       Change these two hexes to re-skin the chat's accent. */
+    --sena-chat-accent: #bb6a3c;
+    --sena-chat-accent-hover: #a25a30;
+    --sena-chat-on-accent: #ffffff;
+}
+
+/* Dark theme. */
+.sena-ai-chat[data-chat-theme="dark"] {
+    --sena-chat-bg: #1b1c1e;
+    --sena-chat-surface: #26282b;
+    --sena-chat-border: #36393d;
+    --sena-chat-text: #e7e6e1;
+    --sena-chat-muted: #9aa0a6;
+    --sena-chat-input-bg: #26282b;
+    --sena-chat-accent: #c47a4a;
+    --sena-chat-accent-hover: #d2895c;
+    --sena-chat-on-accent: #ffffff;
+}
 
 .sena-ai-chat {
     background: var(--sena-chat-bg, var(--bg-color));
@@ -9,6 +39,7 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
+    position: relative; /* anchor the history drawer + drop overlay */
     width: 100%;
 }
 
@@ -31,9 +62,9 @@
 
 .sena-ai-chat-empty-avatar {
     align-items: center;
-    background: var(--primary);
+    background: var(--sena-chat-accent, var(--primary));
     border-radius: 50%;
-    color: var(--white, #fff);
+    color: var(--sena-chat-on-accent, #fff);
     display: inline-flex;
     font-size: 20px;
     font-weight: 700;
@@ -69,8 +100,8 @@
 
 .sena-ai-msg-user {
     align-self: flex-end;
-    background: var(--primary);
-    color: var(--white, #fff);
+    background: var(--sena-chat-accent, var(--primary));
+    color: var(--sena-chat-on-accent, #fff);
 }
 
 .sena-ai-msg-assistant {
@@ -152,8 +183,8 @@
 }
 
 .sena-ai-composer:focus-within {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+    border-color: var(--sena-chat-accent, var(--primary));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--sena-chat-accent, var(--primary)) 16%, transparent);
 }
 
 .sena-ai-chat-textarea {
@@ -178,10 +209,10 @@
 
 .sena-ai-send-btn {
     align-items: center;
-    background: var(--primary);
+    background: var(--sena-chat-accent, var(--primary));
     border: 0;
     border-radius: 50%;
-    color: var(--white, #fff);
+    color: var(--sena-chat-on-accent, #fff);
     cursor: pointer;
     display: inline-flex;
     flex: 0 0 auto;
@@ -193,6 +224,7 @@
 }
 
 .sena-ai-send-btn:hover:not(:disabled) {
+    background: var(--sena-chat-accent-hover, var(--primary));
     transform: scale(1.06);
 }
 
@@ -282,7 +314,7 @@
 
 .sena-ai-starter-chip:hover:not(:disabled) {
     background: var(--sena-chat-input-bg, var(--bg-light-gray));
-    border-color: var(--primary);
+    border-color: var(--sena-chat-accent, var(--primary));
 }
 
 .sena-ai-starter-chip:disabled {
@@ -292,7 +324,7 @@
 
 /* Links to Desk records jump the visible Desk tab in place (set_route). */
 .sena-md-link {
-    color: var(--primary);
+    color: var(--sena-chat-accent, var(--primary));
     text-decoration: underline;
     text-underline-offset: 2px;
     word-break: break-word;
@@ -353,7 +385,7 @@
 }
 
 .sena-ai-md a {
-    color: var(--primary);
+    color: var(--sena-chat-accent, var(--primary));
     text-decoration: underline;
 }
 
@@ -437,3 +469,320 @@
 .sena-ai-tool-chip-done .icon {
     color: var(--green-600, #2e7d32);
 }
+
+/* Per-tool resolution states (running → ✓ / ✗). */
+.sena-ai-tool-running { /* default look */ }
+.sena-ai-tool-ok { opacity: 0.75; }
+.sena-ai-tool-ok .icon { color: var(--green-600, #2e7d32); }
+.sena-ai-tool-fail { opacity: 0.85; }
+.sena-ai-tool-fail .icon { color: var(--red-600, #b53f3f); }
+
+/* Thinking — live indicator + collapsible reasoning dropdown. */
+.sena-ai-thinking-live {
+    align-items: center;
+    color: var(--sena-chat-muted, var(--text-muted));
+    display: flex;
+    font-size: 12px;
+    gap: 7px;
+    margin-bottom: 8px;
+}
+.sena-ai-thinking {
+    margin-bottom: 8px;
+}
+.sena-ai-thinking > summary {
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    font-size: 12px;
+    list-style: none;
+    user-select: none;
+}
+.sena-ai-thinking > summary::before {
+    content: "▸ ";
+}
+.sena-ai-thinking[open] > summary::before {
+    content: "▾ ";
+}
+.sena-ai-thinking-body {
+    border-left: 2px solid var(--sena-chat-border, var(--border-color));
+    color: var(--sena-chat-text, var(--text-color));
+    font-size: 12.5px;
+    margin-top: 6px;
+    padding: 4px 0 4px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.sena-ai-thinking-muted {
+    color: var(--sena-chat-muted, var(--text-muted));
+    font-style: italic;
+}
+
+/* New chat action bar. */
+.sena-ai-chat-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 6px 12px 0;
+}
+.sena-ai-newchat-btn {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--sena-chat-border, var(--border-color));
+    border-radius: 999px;
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 12px;
+    gap: 5px;
+    padding: 4px 10px;
+}
+.sena-ai-newchat-btn:hover {
+    background: var(--sena-chat-input-bg, var(--bg-light-gray));
+    color: var(--sena-chat-text, var(--text-color));
+}
+
+/* Stop button (replaces send while a turn streams). */
+.sena-ai-stop-btn {
+    background: var(--red-600, #b53f3f) !important;
+}
+.sena-ai-stop-icon {
+    background: var(--white, #fff);
+    border-radius: 2px;
+    display: inline-block;
+    height: 11px;
+    width: 11px;
+}
+
+/* History button in the chat-actions bar (sits left; New chat stays right). */
+.sena-ai-history-btn {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--sena-chat-border, var(--border-color));
+    border-radius: 999px;
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 12px;
+    gap: 5px;
+    margin-right: auto;
+    padding: 4px 10px;
+}
+.sena-ai-history-btn:hover {
+    background: var(--sena-chat-input-bg, var(--bg-light-gray));
+    color: var(--sena-chat-text, var(--text-color));
+}
+
+/* History slide-over drawer (in-panel). */
+.sena-ai-history {
+    animation: sena-ai-slide-in 0.16s ease;
+    background: var(--sena-chat-bg, var(--bg-color));
+    border-left: 1px solid var(--sena-chat-border, var(--border-color));
+    bottom: 0;
+    box-shadow: -8px 0 24px -12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    max-width: 360px;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 80%;
+    z-index: 5;
+}
+@keyframes sena-ai-slide-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+.sena-ai-history-head {
+    align-items: center;
+    border-bottom: 1px solid var(--sena-chat-border, var(--border-color));
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 12px;
+}
+.sena-ai-history-head strong {
+    color: var(--sena-chat-text, var(--text-color));
+    font-size: 14px;
+}
+.sena-ai-history-close {
+    background: transparent;
+    border: 0;
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 2px;
+}
+.sena-ai-history-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 6px;
+}
+.sena-ai-history-empty {
+    color: var(--sena-chat-muted, var(--text-muted));
+    font-size: 13px;
+    padding: 16px;
+    text-align: center;
+}
+.sena-ai-history-item {
+    align-items: center;
+    border-radius: 8px;
+    display: flex;
+    gap: 4px;
+}
+.sena-ai-history-item:hover,
+.sena-ai-history-item.is-active {
+    background: var(--sena-chat-input-bg, var(--bg-light-gray));
+}
+.sena-ai-history-open {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 8px 10px;
+    text-align: left;
+}
+.sena-ai-history-title {
+    color: var(--sena-chat-text, var(--text-color));
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+}
+.sena-ai-history-time {
+    color: var(--sena-chat-muted, var(--text-muted));
+    font-size: 11px;
+}
+.sena-ai-history-del {
+    background: transparent;
+    border: 0;
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    flex: 0 0 auto;
+    opacity: 0;
+    padding: 6px;
+    transition: opacity 0.12s ease;
+}
+.sena-ai-history-item:hover .sena-ai-history-del {
+    opacity: 0.7;
+}
+.sena-ai-history-del:hover {
+    color: var(--red-600, #b53f3f);
+    opacity: 1;
+}
+
+/* Attachments — composer attach button, preview row, in-bubble previews. */
+.sena-ai-attach-btn {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--sena-chat-muted, var(--text-muted));
+    cursor: pointer;
+    display: flex;
+    flex: 0 0 auto;
+    padding: 6px;
+}
+.sena-ai-attach-btn:hover { color: var(--sena-chat-text, var(--text-color)); }
+
+.sena-ai-attach-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 2px 2px 10px;
+}
+.sena-ai-attach { position: relative; }
+.sena-ai-attach-thumb {
+    border: 1px solid var(--sena-chat-border, var(--border-color));
+    border-radius: 8px;
+    height: 56px;
+    object-fit: cover;
+    width: 56px;
+}
+.sena-ai-attach-doc {
+    align-items: center;
+    background: var(--sena-chat-surface, var(--card-bg));
+    border: 1px solid var(--sena-chat-border, var(--border-color));
+    border-radius: 8px;
+    color: var(--sena-chat-text, var(--text-color));
+    display: inline-flex;
+    font-size: 12px;
+    gap: 5px;
+    max-width: 170px;
+    overflow: hidden;
+    padding: 8px 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sena-ai-attach-x {
+    align-items: center;
+    background: var(--sena-chat-text, #333);
+    border: 0;
+    border-radius: 50%;
+    color: var(--sena-chat-bg, #fff);
+    cursor: pointer;
+    display: flex;
+    height: 18px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: -6px;
+    top: -6px;
+    width: 18px;
+}
+.sena-ai-attach-x .icon { height: 11px; width: 11px; }
+
+.sena-ai-msg-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.sena-ai-att-thumb {
+    border-radius: 8px;
+    max-height: 180px;
+    max-width: 100%;
+    object-fit: contain;
+}
+.sena-ai-att-chip {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    display: inline-flex;
+    font-size: 12px;
+    gap: 5px;
+    padding: 4px 8px;
+}
+
+/* Drag-and-drop overlay shown while dragging a file over the chat. */
+.sena-ai-dropzone {
+    align-items: center;
+    background: var(--sena-chat-surface, var(--card-bg));
+    border: 2px dashed var(--sena-chat-accent, var(--primary));
+    border-radius: 12px;
+    color: var(--sena-chat-accent, var(--primary));
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    font-weight: 600;
+    gap: 8px;
+    inset: 8px;
+    justify-content: center;
+    opacity: 0.97;
+    pointer-events: none;
+    position: absolute;
+    z-index: 6;
+}
+
+/* Transient attachment-rejection notice (too big / wrong type / too many). */
+.sena-ai-reject-note {
+    background: var(--orange-100, #fdf2e3);
+    border-bottom: 1px solid var(--sena-chat-border, var(--border-color));
+    color: var(--orange-600, #91643a);
+    font-size: 12px;
+    padding: 6px 12px;
+    text-align: center;
+}
+
+/* Copy button confirmation. */
+.sena-ai-copy-btn.is-copied { opacity: 1; }
+.sena-ai-copy-btn.is-copied .icon { color: var(--green-600, #2e7d32); }

@@ -1,9 +1,10 @@
 # claude-desk-sidebar
 
 A chat interface built **on top of Claude Code** (via the Claude Agent SDK) for the
-Frappe/ERPNext **Desk** right sidebar. Instead of an embedded terminal, employees get
-a real chat: streaming replies, markdown, tool-call chips, screen-aware answers, and
-record links that move the Desk in place.
+Frappe/ERPNext **Desk** right sidebar. Instead of an embedded terminal, employees get a
+real chat: streaming replies, markdown, resolved tool-call chips, a thinking indicator,
+screen-aware answers, record links that move the Desk in place, image/PDF upload,
+multi-chat history, and Stop.
 
 > Key idea: this is **not** the raw Anthropic API. It runs the *same agent as the
 > `claude` CLI* (its tools, file access, and `CLAUDE.md` project context) as a library,
@@ -14,49 +15,46 @@ browser chat UI  →  WebSocket  →  Node chat-server  →  Claude Agent SDK  �
    (frontend/)                       (server/)         @anthropic-ai/claude-agent-sdk
 ```
 
+## Features
+- **Streaming** assistant text + **markdown** (code blocks w/ copy, tables, lists, links).
+- **Tool chips** that resolve to ✓/✗ with human labels ("Ran a command", "Looked up Item ITM-1").
+- **Thinking** indicator + token estimate (chain-of-thought text is redacted on the
+  subscription login; the UI auto-fills it if a richer auth ever exposes it).
+- **Stop** a long turn (streaming-input mode → `query.interrupt()`).
+- **Screen-aware**: every message carries a Desk-context snapshot so "this"/"here" resolve.
+- **Desk-aware links**: record links navigate the Desk in place via `frappe.set_route`.
+- **Attachments**: paste (Ctrl+V), drag-drop, or pick — images and PDFs go inline as
+  base64 blocks (vision). Caps + friendly rejection notices.
+- **Multi-chat history** in `localStorage` (multi-tab-safe), browsable drawer, resume on
+  reload; image previews persisted in **IndexedDB** so they survive a reload.
+- **Auto-reconnect** with backoff; operator-friendly "reconnecting…" — never a stack trace.
+- Light/dark theme with a warm clay accent.
+
 ## Repo layout
 
 | Path | What it is |
 |------|------------|
-| `server/chat-server.mjs` | The runtime. A WebSocket server (port 7683) that wraps the Agent SDK's `query()` and relays a tiny JSON protocol to the browser. |
+| `server/chat-server.mjs` | The runtime. WebSocket server (port 7683) wrapping the Agent SDK; relays a small JSON protocol. |
+| `server/lib.mjs` | Pure helpers (context preamble, tool labels, multimodal content builder) — unit-tested. |
+| `server/test/lib.test.mjs` | `node --test` suite for `lib.mjs`. |
 | `server/package.json` | Deps: `@anthropic-ai/claude-agent-sdk`, `ws`. |
-| `frontend/chat-panel.js` | **Reference snapshot** of the chat UI (Preact). Lives inside a Frappe asset bundle in the host app; see *Integration*. |
-| `frontend/chat-panel.css` | Chat + markdown styles. |
+| `frontend/chat-panel.js` | **Reference snapshot** of the chat UI (Preact) — lives inside the host app's bundle. |
+| `frontend/chat-panel.css` | Chat / markdown / history / attachment styles (themed). |
+| `frontend/sena_chat_store.mjs` | Multi-chat history store (localStorage), multi-tab-safe. |
+| `frontend/sena_chat_idb.mjs` | IndexedDB store for image-attachment previews. |
+| `frontend/sena_chat_store.test.mjs` | `node --test` suite for the store. |
 | `examples/sena-chat-claude.service` | systemd `--user` unit that keeps the server running. |
 
-## How it works
+## Wire protocol
 
-### Server (`server/chat-server.mjs`)
-- Listens on `ws://127.0.0.1:7683`.
-- Per browser message `{ text, context }`, it calls the Agent SDK:
-  ```js
-  query({ prompt, options: {
-    cwd,                                        // loads the project's CLAUDE.md
-    permissionMode: "bypassPermissions",
-    systemPrompt: { type: "preset", preset: "claude_code" },
-    includePartialMessages: true,               // stream token deltas
-    resume: sessionId,                          // multi-turn memory (after turn 1)
-  }})
-  ```
-- Translates the SDK's event stream into a small wire protocol:
-  - `{ kind: "text", text }` — streaming assistant text
-  - `{ kind: "tool", name }` — a tool call started (rendered as a chip)
-  - `{ kind: "done", session }` — end of turn (carries the session id)
-  - `{ kind: "error", message }` — something failed
-- **Memory:** the captured `session_id` is passed back as `resume` on the next turn, so
-  the agent sees the whole conversation.
-- **Ordering matters:** `done` is sent *after* the per-connection `busy` flag is cleared,
-  so the client's next message can't race in and get rejected.
+Client → server: `{ type: "send", text, context, attachments[] }`, `{ type: "stop" }`,
+`{ type: "new" }`, `{ type: "resume", session }`.
 
-### Frontend (`frontend/chat-panel.js`)
-- `getDeskContext()` snapshots the current screen (route, doctype/docname, user, company)
-  and sends it with every message → the agent resolves "this", "here", "current item"
-  without the user typing a record name.
-- `SmartLink` turns Desk links (`/app/...`, `/desk/...`) into in-place navigations via
-  `frappe.set_route(...)` instead of opening new tabs.
-- Surface-aware **starter chips** on the empty state lower the "what do I type" barrier.
-- **Auto-reconnect** with exponential backoff (1→2→4→8→15s) and a calm "reconnecting…"
-  banner; technical detail goes to the console, never the chat.
+Server → client: `text`, `thinking_start` / `thinking` / `thinking_tokens`,
+`tool` / `tool_done`, `done` (carries session id), `session_reset`, `error`.
+
+Multi-turn memory uses the SDK's `resume`; an expired session is detected and the server
+transparently retries in a fresh session (`session_reset`).
 
 ## Running the server
 
@@ -69,33 +67,34 @@ npm install
 node chat-server.mjs        # ws://127.0.0.1:7683
 ```
 
-The server sets its working directory to `../context` (relative to `server/`) so it loads
-that folder's `CLAUDE.md`. It is designed to run inside the host Frappe app at
-`apps/<app>/tools/sena_sidebar_claude/server/`, next to a `../context/CLAUDE.md`. Adjust
-`CONTEXT_DIR` in `chat-server.mjs` if you run it elsewhere.
+It sets cwd to `../context` to load that folder's `CLAUDE.md`; designed to run inside the
+host app at `apps/<app>/tools/sena_sidebar_claude/server/`. Adjust `CONTEXT_DIR` otherwise.
 
 ### Run as a service (Linux)
-
 ```bash
 cp examples/sena-chat-claude.service ~/.config/systemd/user/
 # edit WorkingDirectory/ExecStart paths to match your machine
 systemctl --user daemon-reload
 systemctl --user enable --now sena-chat-claude
-journalctl --user -u sena-chat-claude -f   # logs
+journalctl --user -u sena-chat-claude -f
+```
+
+## Tests
+```bash
+cd server && node --test test/lib.test.mjs        # server helpers
+cd frontend && node --test sena_chat_store.test.mjs   # history store
 ```
 
 ## Integration with the Frappe app
-
-The frontend code in `frontend/` is shipped from inside the host app's asset bundle
-(`sena_erp/public/js/sena_ai_sidebar.bundle.js`), built by Frappe's esbuild. Wiring:
-
+The `frontend/` code ships from inside the host app's asset bundle
+(`sena_ai_sidebar.bundle.js`), built by Frappe's esbuild:
 1. `sena_ai_sidebar.config.js` → `window.senaAiSidebarConfig.chatUrl = "ws://127.0.0.1:7683"`.
-2. A provider entry `{ key: "claude-chat", kind: "chat", url: chatUrl }` selects `<ChatPanel/>`.
-3. `hooks.py` `app_include_js` / `app_include_css` ship the built bundle into Desk.
-4. `bench build --app <app>` rebuilds the bundle after changes.
+2. A provider `{ key: "claude-chat", kind: "chat", url: chatUrl }` renders `<ChatPanel/>`.
+3. `hooks.py` `app_include_js` / `app_include_css` ship the bundle into Desk.
+4. `bench build --app <app>` rebuilds after changes.
 
 ## Notes
-- Auth is the existing Claude Code subscription login; nothing is billed per-token and no
-  key is stored in this repo.
-- `frontend/` is a reference snapshot, not a standalone build — `preact` and the hooks are
-  provided by the host bundle.
+- Auth is the existing Claude Code subscription login; nothing billed per-token, no key in this repo.
+- The server runs the agent with broad permissions for a single trusted operator. Add
+  WebSocket auth + tool/scope restrictions before any multi-user deployment.
+- `frontend/` is a reference snapshot, not a standalone build — `preact` is provided by the host bundle.

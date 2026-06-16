@@ -1,0 +1,16 @@
+[Unit]
+Description=Sena AI Sidebar Claude Chat Server (Agent SDK over WebSocket)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jaidev/Desktop/frappebuilds/bench/apps/sena_erp/tools/sena_sidebar_claude/server
+# node runs the server; claude (spawned by the Agent SDK) must be on PATH.
+# Auth is inherited from ~/.claude — no ANTHROPIC_API_KEY here on purpose.
+Environment=PATH=/home/jaidev/.local/bin:/home/jaidev/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/node chat-server.mjs
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

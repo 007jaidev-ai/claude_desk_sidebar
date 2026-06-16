@@ -1,0 +1,16 @@
+{
+  "name": "sena-sidebar-chat-server",
+  "version": "0.1.0",
+  "description": "WebSocket chat server wrapping the Claude Agent SDK for the Sena Desk sidebar",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "spike": "node spike.mjs",
+    "start": "node chat-server.mjs"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.178",
+    "ws": "^8.21.0"
+  }
+}

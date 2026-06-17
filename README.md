@@ -15,6 +15,12 @@ browser chat UI  →  WebSocket  →  Node chat-server  →  Claude Agent SDK  �
    (frontend/)                       (server/)         @anthropic-ai/claude-agent-sdk
 ```
 
+## UI at a glance
+
+![Annotated chat panel](docs/chat-mock-annotated.png)
+
+*Annotated mock of the chat panel (numbered callouts in [`docs/chat-mock-annotated.svg`](docs/chat-mock-annotated.svg)). Solid = shipping; dashed = a flagged design opportunity.*
+
 ## Features
 - **Streaming** assistant text + **markdown** (code blocks w/ copy, tables, lists, links).
 - **Tool chips** that resolve to ✓/✗ with human labels ("Ran a command", "Looked up Item ITM-1").
@@ -39,7 +45,9 @@ browser chat UI  →  WebSocket  →  Node chat-server  →  Claude Agent SDK  �
 | `server/chat-server.mjs` | The runtime. WebSocket server (port 7683) wrapping the Agent SDK; relays a small JSON protocol. |
 | `server/lib.mjs` | Pure helpers (context preamble, tool labels, multimodal content builder) — unit-tested. |
 | `server/test/lib.test.mjs` | `node --test` suite for `lib.mjs`. |
-| `server/package.json` | Deps: `@anthropic-ai/claude-agent-sdk`, `ws`. |
+| `server/package.json` | Deps: `@anthropic-ai/claude-agent-sdk`, `ws`, `xlsx` + `mammoth` (attachment extraction). |
+| `server/test/fixtures/sample.docx` | Fixture for the docx-extraction test. |
+| `docs/chat-mock-annotated.*` | Annotated UI mock (png + svg). |
 | `frontend/chat-panel.js` | **Reference snapshot** of the chat UI (Preact) — lives inside the host app's bundle. |
 | `frontend/chat-panel.css` | Chat / markdown / history / attachment styles (themed). |
 | `frontend/sena_chat_store.mjs` | Multi-chat history store (localStorage), multi-tab-safe. |
@@ -53,7 +61,8 @@ Client → server: `{ type: "send", text, context, attachments[] }`, `{ type: "s
 `{ type: "new" }`, `{ type: "resume", session }`.
 
 Server → client: `text`, `thinking_start` / `thinking` / `thinking_tokens`,
-`tool` / `tool_done`, `done` (carries session id), `session_reset`, `error`.
+`tool` / `tool_done`, `compacted` (history auto-summarized to stay under the context
+window), `done` (carries session id), `session_reset`, `error`.
 
 Multi-turn memory uses the SDK's `resume`; an expired session is detected and the server
 transparently retries in a fresh session (`session_reset`).
@@ -82,10 +91,15 @@ journalctl --user -u sena-chat-claude -f
 ```
 
 ## Tests
+
+From a clean clone (server deps are needed because the extractor tests load `xlsx`):
+
 ```bash
-cd server && node --test test/lib.test.mjs        # server helpers
-cd frontend && node --test sena_chat_store.test.mjs   # history store
+cd server && npm install && node --test        # 16 tests — helpers + attachment extraction
+cd ../frontend && node --test                   # 8 tests — history store (no deps)
 ```
+
+Both suites are dependency-light `node:test` and run without a browser or a live agent.
 
 ## Integration with the Frappe app
 The `frontend/` code ships from inside the host app's asset bundle
@@ -100,3 +114,8 @@ The `frontend/` code ships from inside the host app's asset bundle
 - The server runs the agent with broad permissions for a single trusted operator. Add
   WebSocket auth + tool/scope restrictions before any multi-user deployment.
 - `frontend/` is a reference snapshot, not a standalone build — `preact` is provided by the host bundle.
+
+## License
+
+Proprietary — internal Sena / Avinash Industries tooling. Not licensed for redistribution
+or external use (`package.json` → `UNLICENSED`).

@@ -585,11 +585,14 @@ function ChatPanel({ url, onStatus, theme }) {
         "text/csv", "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain", "text/markdown", "text/tab-separated-values", "application/json",
     ]);
     const EXT_MIME = {
         csv: "text/csv",
         xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        txt: "text/plain", md: "text/markdown", log: "text/plain",
+        tsv: "text/tab-separated-values", json: "application/json",
     };
 
     const flashReject = useCallback((msg) => {
@@ -604,7 +607,7 @@ function ChatPanel({ url, onStatus, theme }) {
             const mediaType = file.type || EXT_MIME[ext] || "";
             const isPdf = mediaType === "application/pdf";
             const isDoc = isPdf || DOC_MIME.has(mediaType);
-            if (!isImage && !isDoc) return flashReject(`"${file.name}" isn't a supported file (image, PDF, or spreadsheet/doc).`);
+            if (!isImage && !isDoc) return flashReject(`"${file.name}" isn't a supported file (image, PDF, spreadsheet, doc, or text).`);
             if (file.size > ATTACH_MAX_BYTES) return flashReject(`"${file.name}" is over 5 MB.`);
             const reader = new FileReader();
             reader.onload = () => {
@@ -924,7 +927,7 @@ function ChatPanel({ url, onStatus, theme }) {
             ),
             h("div", { className: "sena-ai-composer" },
                 h("input", {
-                    type: "file", ref: fileInputRef, accept: "image/*,application/pdf,.csv,.xlsx,.docx",
+                    type: "file", ref: fileInputRef, accept: "image/*,application/pdf,.csv,.xlsx,.docx,.txt,.md,.log,.tsv,.json",
                     multiple: true, style: "display:none",
                     onChange: (event) => { addFiles(event.target.files); event.target.value = ""; },
                 }),
@@ -960,7 +963,7 @@ function ChatPanel({ url, onStatus, theme }) {
                         onClick: sendMessage,
                     }, h(Icon, { name: "send" }))
             ),
-            h("div", { className: "sena-ai-composer-hint" }, "Enter to send · paste or drop an image / PDF")
+            h("div", { className: "sena-ai-composer-hint" }, "Enter to send · paste or drop an image, PDF, spreadsheet, or text file")
         )
     );
 }

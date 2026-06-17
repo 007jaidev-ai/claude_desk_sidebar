@@ -30,9 +30,10 @@ browser chat UI  →  WebSocket  →  Node chat-server  →  Claude Agent SDK  �
 - **Screen-aware**: every message carries a Desk-context snapshot so "this"/"here" resolve.
 - **Desk-aware links**: record links navigate the Desk in place via `frappe.set_route`.
 - **Attachments**: paste (Ctrl+V), drag-drop, or pick. Images and PDFs go inline as
-  base64 blocks (vision); **spreadsheets/docs (xlsx, csv, docx) are extracted to text/
-  markdown on the server** (SheetJS + mammoth) before the turn, so the model reads their
-  contents. Caps + friendly rejection notices.
+  base64 blocks (vision); **spreadsheets/docs/text (xlsx, csv, docx, txt, md, log, tsv,
+  json) are extracted to text/markdown on the server** (SheetJS + mammoth; JSON is
+  pretty-printed) before the turn, so the model reads their contents. Caps + friendly
+  rejection notices.
 - **Multi-chat history** in `localStorage` (multi-tab-safe), browsable drawer, resume on
   reload; image previews persisted in **IndexedDB** so they survive a reload.
 - **Auto-reconnect** with backoff; operator-friendly "reconnecting…" — never a stack trace.

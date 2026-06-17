@@ -143,6 +143,27 @@ test("extractAttachments: images and pdfs pass through untouched", async () => {
   assert.deepEqual(out, atts);
 });
 
+test("extractAttachments: plain text / markdown / log decode to raw text", async () => {
+  const data = Buffer.from("# Notes\nrestock the 3B line").toString("base64");
+  const out = await extractAttachments([{ kind: "document", name: "notes.md", mediaType: "text/markdown", data }]);
+  assert.equal(out[0].kind, "text");
+  assert.equal(out[0].data, undefined);
+  assert.match(out[0].text, /# Notes/);
+  assert.match(out[0].text, /restock the 3B line/);
+});
+
+test("extractAttachments: valid JSON is pretty-printed", async () => {
+  const data = Buffer.from('{"model":"Luxe 3B","margin":21}').toString("base64");
+  const out = await extractAttachments([{ kind: "document", name: "q.json", mediaType: "application/json", data }]);
+  assert.match(out[0].text, /"model": "Luxe 3B"/); // re-indented with a space after the colon
+});
+
+test("extractAttachments: invalid JSON falls back to raw text", async () => {
+  const data = Buffer.from("{not valid json").toString("base64");
+  const out = await extractAttachments([{ kind: "document", name: "bad.json", mediaType: "application/json", data }]);
+  assert.match(out[0].text, /\{not valid json/);
+});
+
 test("extractAttachments: workbook beyond MAX_SHEETS renders the cap and notes the rest", async () => {
   const wb = XLSX.utils.book_new();
   for (let i = 1; i <= 13; i++) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["x"]]), `S${i}`);

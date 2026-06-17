@@ -20,6 +20,14 @@ export const SHEET_TYPES = new Set([
 export const DOC_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+// Plain-text family — decoded as UTF-8 (JSON is pretty-printed). Lets .txt/.md/
+// .json/.log/.tsv go through the upload box instead of needing an on-disk path.
+export const TEXT_TYPES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/tab-separated-values",
+  "application/json",
+]);
 
 // Generous-cap guardrails so a huge workbook can't blow the context window.
 export const MAX_SHEET_ROWS = 1000; // rows rendered per sheet (incl. header)
@@ -117,15 +125,18 @@ export async function extractAttachments(attachments) {
     const media = att?.mediaType || "";
     const isSheet = SHEET_TYPES.has(media);
     const isDoc = DOC_TYPES.has(media);
-    if (!isSheet && !isDoc) {
+    const isText = TEXT_TYPES.has(media);
+    if (!isSheet && !isDoc && !isText) {
       out.push(att); // image / pdf / anything else: leave as-is
       continue;
     }
-    const name = att?.name || (isSheet ? "spreadsheet" : "document");
+    const name = att?.name || (isSheet ? "spreadsheet" : isDoc ? "document" : "file");
     try {
       const buffer = Buffer.from(typeof att?.data === "string" ? att.data : "", "base64");
       if (!buffer.length) throw new Error("empty file");
-      const text = isSheet ? extractWorkbook(buffer) : await extractDocx(buffer);
+      const text = isSheet ? extractWorkbook(buffer)
+        : isDoc ? await extractDocx(buffer)
+        : extractText(buffer, media);
       out.push({ kind: "text", name, text: clampChars(text, MAX_EXTRACT_CHARS) });
     } catch (err) {
       console.warn(`[sena-chat] could not extract "${name}":`, err?.message || err);
@@ -154,6 +165,16 @@ function extractWorkbook(buffer) {
 async function extractDocx(buffer) {
   const result = await mammoth.extractRawText({ buffer });
   return (result?.value || "").trim() || "_(no readable text)_";
+}
+
+// Plain-text family (txt/md/log/tsv/json). JSON is pretty-printed when valid so
+// the model sees clean structure; anything unparseable falls back to raw text.
+function extractText(buffer, media) {
+  const raw = buffer.toString("utf8");
+  if (media === "application/json") {
+    try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { /* not valid JSON — use raw */ }
+  }
+  return raw.trim() || "_(empty file)_";
 }
 
 // Array-of-arrays (from sheet_to_json header:1) -> a markdown table, capped.

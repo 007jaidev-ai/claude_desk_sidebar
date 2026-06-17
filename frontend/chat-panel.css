@@ -257,11 +257,27 @@
 }
 
 .sena-ai-composer-hint {
+    align-items: baseline;
     color: var(--sena-chat-muted, var(--text-muted));
+    display: flex;
     font-size: 11px;
+    gap: 8px;
+    justify-content: space-between;
     opacity: 0.65;
     padding-right: 4px;
-    text-align: right;
+}
+
+/* Live character counter — only rendered as the input nears the cap. */
+.sena-ai-char-count {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+.sena-ai-char-count.is-over {
+    color: var(--red-500, #c0392b);
+    font-weight: 600;
+    opacity: 1;
 }
 
 /* Calm "reconnecting" banner — never shows shell commands or stack traces to

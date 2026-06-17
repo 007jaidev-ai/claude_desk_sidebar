@@ -574,6 +574,7 @@ function ChatPanel({ url, onStatus, theme }) {
     }
 
     // ---- Attachments (paste / drop / pick) ----
+    const MAX_MESSAGE_CHARS = 100000;           // mirrors the server's per-turn text cap
     const ATTACH_MAX_BYTES = 5 * 1024 * 1024;   // 5 MB per file
     const ATTACH_MAX_COUNT = 8;                  // files per message
     const ATTACH_MAX_TOTAL = 22 * 1024 * 1024;   // ~match the server's per-turn cap
@@ -666,6 +667,11 @@ function ChatPanel({ url, onStatus, theme }) {
         const useAtts = (atts || []).filter((a) => a.data); // skip any still-loading
         const ws = wsRef.current;
         if ((!text && !useAtts.length) || streaming || !ws || ws.readyState !== WebSocket.OPEN) return;
+        // Guard the cap client-side so a long paste fails fast and clearly,
+        // rather than getting rejected by the server after a round-trip.
+        if (text.length > MAX_MESSAGE_CHARS) {
+            return flashReject(`Message is too long (${text.length.toLocaleString()} / ${MAX_MESSAGE_CHARS.toLocaleString()} chars). Shorten it or attach a file.`);
+        }
         // Stash image previews in IndexedDB; the message keeps only an idbId so
         // the thumbnail survives reload without bloating localStorage.
         const msgAtts = useAtts.map((a) => {
@@ -687,7 +693,7 @@ function ChatPanel({ url, onStatus, theme }) {
             context: getDeskContext(),
             attachments: useAtts.map((a) => ({ name: a.name, kind: a.kind, mediaType: a.mediaType, data: a.data })),
         }));
-    }, [streaming]);
+    }, [streaming, flashReject]);
 
     const sendMessage = useCallback(() => doSend(input, attachments), [doSend, input, attachments]);
     const sendText = useCallback((raw) => doSend(raw, []), [doSend]);
@@ -957,13 +963,19 @@ function ChatPanel({ url, onStatus, theme }) {
                     : h("button", {
                         type: "button",
                         className: "sena-ai-send-btn",
-                        title: "Send (Enter)",
+                        title: input.length > MAX_MESSAGE_CHARS ? "Message too long" : "Send (Enter)",
                         "aria-label": "Send message",
-                        disabled: !input.trim() && attachments.length === 0,
+                        disabled: (!input.trim() && attachments.length === 0) || input.length > MAX_MESSAGE_CHARS,
                         onClick: sendMessage,
                     }, h(Icon, { name: "send" }))
             ),
-            h("div", { className: "sena-ai-composer-hint" }, "Enter to send · paste or drop an image, PDF, spreadsheet, or text file")
+            h("div", { className: "sena-ai-composer-hint" },
+                h("span", null, "Enter to send · paste or drop an image, PDF, spreadsheet, or text file"),
+                // Counter appears only as you approach the cap; turns into a warning past it.
+                input.length > MAX_MESSAGE_CHARS * 0.9 && h("span", {
+                    className: `sena-ai-char-count${input.length > MAX_MESSAGE_CHARS ? " is-over" : ""}`,
+                }, `${input.length.toLocaleString()} / ${MAX_MESSAGE_CHARS.toLocaleString()}`)
+            )
         )
     );
 }

@@ -21,6 +21,7 @@
 //   { kind: "thinking", text }        streaming reasoning (for the dropdown)
 //   { kind: "tool", id, label }       a tool started (human label)
 //   { kind: "tool_done", id, ok }     that tool finished (✓ / ✗)
+//   { kind: "compacted", trigger, preTokens }  SDK summarized old history
 //   { kind: "done", session, stopped} turn ended; carries session id
 //   { kind: "error", message }        something failed
 
@@ -28,7 +29,7 @@ import { WebSocketServer } from "ws";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { contextPreamble, toolLabel, buildUserContent } from "./lib.mjs";
+import { contextPreamble, toolLabel, buildUserContent, extractAttachments } from "./lib.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTEXT_DIR = resolve(__dirname, "../context"); // loads ../context/CLAUDE.md
@@ -83,8 +84,10 @@ wss.on("connection", (ws) => {
     let stopped = false;
     let produced = false; // did this attempt stream anything before failing?
     const prompt = contextPreamble(context) + text;
+    // Extract spreadsheet/doc attachments to text before building the content.
+    const prepared = await extractAttachments(attachments);
     // String when no attachments; otherwise a multimodal content array.
-    const userContent = buildUserContent(prompt, attachments);
+    const userContent = buildUserContent(prompt, prepared);
 
     // One streaming attempt. With useResume=false we deliberately start fresh.
     const attempt = async (useResume) => {
@@ -125,6 +128,16 @@ wss.on("connection", (ws) => {
         } else if (msg.type === "system" && msg.subtype === "thinking_tokens") {
           // The only thinking signal the subscription exposes: how much it thought.
           send({ kind: "thinking_tokens", tokens: msg.estimated_tokens });
+        } else if (msg.type === "system" && msg.subtype === "compact_boundary") {
+          // The SDK summarized older history to stay under the context window
+          // (auto when the window fills, or manual via /compact). Forward it so
+          // the UI can reassure the user in plain language. compact_metadata
+          // carries { pre_tokens, trigger: "auto" | "manual" }.
+          send({
+            kind: "compacted",
+            trigger: msg.compact_metadata?.trigger,
+            preTokens: msg.compact_metadata?.pre_tokens,
+          });
         } else if (msg.type === "assistant") {
           for (const block of msg.message?.content || []) {
             if (block.type === "tool_use") { produced = true; send({ kind: "tool", id: block.id, label: toolLabel(block.name, block.input) }); }

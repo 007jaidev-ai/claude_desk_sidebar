@@ -142,3 +142,16 @@ test("extractAttachments: images and pdfs pass through untouched", async () => {
   const out = await extractAttachments(atts);
   assert.deepEqual(out, atts);
 });
+
+test("extractAttachments: workbook beyond MAX_SHEETS renders the cap and notes the rest", async () => {
+  const wb = XLSX.utils.book_new();
+  for (let i = 1; i <= 13; i++) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["x"]]), `S${i}`);
+  const data = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+  const out = await extractAttachments([
+    { kind: "document", name: "many.xlsx", mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data },
+  ]);
+  // 12 sheets rendered (MAX_SHEETS), the 13th summarized — not dumped.
+  assert.equal((out[0].text.match(/^### /gm) || []).length, 12);
+  assert.match(out[0].text, /1 more sheet\(s\) not shown/);
+  assert.ok(!out[0].text.includes("### S13"));
+});

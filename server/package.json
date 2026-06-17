@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "spike": "node spike.mjs",
-    "start": "node chat-server.mjs"
+    "start": "node chat-server.mjs",
+    "test": "node --test"
   },
   "license": "UNLICENSED",
   "dependencies": {

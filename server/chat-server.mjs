@@ -29,13 +29,28 @@ import { WebSocketServer } from "ws";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { contextPreamble, toolLabel, buildUserContent, extractAttachments } from "./lib.mjs";
+import {
+  contextPreamble, toolLabel, buildUserContent, extractAttachments,
+  isAllowedOrigin, parseAllowedOrigins, MAX_MESSAGE_CHARS,
+} from "./lib.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTEXT_DIR = resolve(__dirname, "../context"); // loads ../context/CLAUDE.md
 
 const PORT = Number(process.env.SENA_CHAT_PORT || 7683);
-const wss = new WebSocketServer({ host: "127.0.0.1", port: PORT });
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.SENA_CHAT_ALLOWED_ORIGINS);
+
+// Reject cross-site browser connections before the handshake completes — the
+// agent can run shell commands, so we don't let arbitrary web pages drive it.
+const wss = new WebSocketServer({
+  host: "127.0.0.1",
+  port: PORT,
+  verifyClient: ({ origin }) => {
+    const ok = isAllowedOrigin(origin, ALLOWED_ORIGINS);
+    if (!ok) console.warn(`[sena-chat] rejected connection from origin: ${origin}`);
+    return ok;
+  },
+});
 console.log(`[sena-chat] listening on ws://127.0.0.1:${PORT} (cwd=${CONTEXT_DIR})`);
 
 // A minimal pushable async-iterable: we push the user message in, and close it
@@ -215,6 +230,9 @@ wss.on("connection", (ws) => {
     const text = (payload?.text || "").trim();
     const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
     if (!text && !attachments.length) return;
+    if (text.length > MAX_MESSAGE_CHARS) {
+      return send({ kind: "error", message: "That message is too long — please shorten it or attach a file instead." });
+    }
     if (busy) return send({ kind: "error", message: "Still answering the previous message." });
     runTurn(text, payload?.context, attachments);
   });

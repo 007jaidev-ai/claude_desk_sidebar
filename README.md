@@ -110,10 +110,19 @@ The `frontend/` code ships from inside the host app's asset bundle
 3. `hooks.py` `app_include_js` / `app_include_css` ship the bundle into Desk.
 4. `bench build --app <app>` rebuilds after changes.
 
+## Security
+- **Origin-locked WebSocket.** The server binds `127.0.0.1`, but because the agent can run
+  shell commands, it also rejects cross-site browser connections (CSWSH / DNS-rebinding):
+  only the local Desk (`localhost` / `127.0.0.1` / `*.localhost`) and origins listed in
+  `SENA_CHAT_ALLOWED_ORIGINS` (comma/space separated; `*` disables the check) may connect.
+  Non-browser clients (no `Origin` header) are allowed.
+- **Input cap.** User text is capped per turn (`MAX_MESSAGE_CHARS`); attachments have their
+  own size/count caps.
+- Still single-trusted-operator by design: add **per-connection auth + tool/scope
+  restrictions** before any multi-user deployment.
+
 ## Notes
 - Auth is the existing Claude Code subscription login; nothing billed per-token, no key in this repo.
-- The server runs the agent with broad permissions for a single trusted operator. Add
-  WebSocket auth + tool/scope restrictions before any multi-user deployment.
 - `frontend/` is a reference snapshot, not a standalone build — `preact` is provided by the host bundle.
 
 ## License

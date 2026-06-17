@@ -5,7 +5,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import * as XLSX from "xlsx";
-import { contextPreamble, toolLabel, buildUserContent, extractAttachments } from "../lib.mjs";
+import {
+  contextPreamble, toolLabel, buildUserContent, extractAttachments,
+  isAllowedOrigin, parseAllowedOrigins,
+} from "../lib.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -175,4 +178,35 @@ test("extractAttachments: workbook beyond MAX_SHEETS renders the cap and notes t
   assert.equal((out[0].text.match(/^### /gm) || []).length, 12);
   assert.match(out[0].text, /1 more sheet\(s\) not shown/);
   assert.ok(!out[0].text.includes("### S13"));
+});
+
+test("isAllowedOrigin: allows the local Desk origins", () => {
+  assert.ok(isAllowedOrigin("http://127.0.0.1:8000"));
+  assert.ok(isAllowedOrigin("http://localhost:8888"));
+  assert.ok(isAllowedOrigin("http://avinash2.localhost:8888")); // *.localhost
+});
+
+test("isAllowedOrigin: allows non-browser clients (no Origin header)", () => {
+  assert.ok(isAllowedOrigin(undefined));
+  assert.ok(isAllowedOrigin(""));
+});
+
+test("isAllowedOrigin: rejects foreign and malformed origins", () => {
+  assert.equal(isAllowedOrigin("https://evil.com"), false);
+  assert.equal(isAllowedOrigin("http://localhost.evil.com"), false); // not *.localhost
+  assert.equal(isAllowedOrigin("not a url"), false);
+});
+
+test("isAllowedOrigin: honors the allowlist and the '*' opt-out", () => {
+  const list = parseAllowedOrigins("https://desk.example.com, https://b.example.com/");
+  assert.ok(isAllowedOrigin("https://desk.example.com", list));
+  assert.ok(isAllowedOrigin("https://b.example.com", list)); // trailing slash normalized
+  assert.equal(isAllowedOrigin("https://c.example.com", list), false);
+  assert.ok(isAllowedOrigin("https://anything.com", parseAllowedOrigins("*")));
+});
+
+test("parseAllowedOrigins: splits, trims, lowercases, drops empties", () => {
+  assert.deepEqual(parseAllowedOrigins("  https://A.com ,, https://B.com/ "),
+    ["https://a.com", "https://b.com"]);
+  assert.deepEqual(parseAllowedOrigins(""), []);
 });

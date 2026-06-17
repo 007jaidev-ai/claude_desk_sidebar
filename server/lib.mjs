@@ -35,6 +35,37 @@ export const MAX_SHEET_COLS = 60;   // columns rendered per sheet
 export const MAX_SHEETS = 12;       // sheets rendered per workbook
 export const MAX_EXTRACT_CHARS = 200_000; // hard stop on extracted text per file
 
+// Max characters of user-typed text accepted per turn (attachments are capped
+// separately). Guards context/cost against a runaway paste.
+export const MAX_MESSAGE_CHARS = 100_000;
+
+// --- WebSocket origin guard ------------------------------------------------
+// The server binds 127.0.0.1, but a page on ANY site the operator visits can
+// still open a socket to localhost (cross-site WebSocket hijacking / DNS
+// rebinding). Because the agent can run shell commands, we reject browser
+// origins that aren't the local Desk. Non-browser clients send no Origin header
+// and are allowed (they could call the SDK directly anyway). Set
+// SENA_CHAT_ALLOWED_ORIGINS (comma/space separated) to permit extra origins,
+// or "*" to disable the check.
+export function parseAllowedOrigins(envValue) {
+  return String(envValue || "")
+    .split(/[\s,]+/)
+    .map((s) => s.trim().replace(/\/$/, "").toLowerCase())
+    .filter(Boolean);
+}
+
+export function isAllowedOrigin(origin, allowlist = []) {
+  if (!origin) return true;                  // non-browser client (no Origin header)
+  if (allowlist.includes("*")) return true;  // explicit opt-out
+  let host;
+  try { host = new URL(origin).hostname.toLowerCase(); }
+  catch { return false; }                    // malformed Origin → reject
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]" || host.endsWith(".localhost")) {
+    return true;                             // the local Desk
+  }
+  return allowlist.includes(String(origin).replace(/\/$/, "").toLowerCase());
+}
+
 // Desk-screen note prepended to every message so "this"/"here"/"current"
 // resolve without the user typing a doctype/name.
 export function contextPreamble(context) {

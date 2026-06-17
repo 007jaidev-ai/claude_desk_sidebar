@@ -3,8 +3,8 @@
 A chat interface built **on top of Claude Code** (via the Claude Agent SDK) for the
 Frappe/ERPNext **Desk** right sidebar. Instead of an embedded terminal, employees get a
 real chat: streaming replies, markdown, resolved tool-call chips, a thinking indicator,
-screen-aware answers, record links that move the Desk in place, image/PDF upload,
-multi-chat history, and Stop.
+screen-aware answers, record links that move the Desk in place, image/PDF/spreadsheet
+upload, multi-chat history, and Stop.
 
 > Key idea: this is **not** the raw Anthropic API. It runs the *same agent as the
 > `claude` CLI* (its tools, file access, and `CLAUDE.md` project context) as a library,
@@ -23,8 +23,10 @@ browser chat UI  →  WebSocket  →  Node chat-server  →  Claude Agent SDK  �
 - **Stop** a long turn (streaming-input mode → `query.interrupt()`).
 - **Screen-aware**: every message carries a Desk-context snapshot so "this"/"here" resolve.
 - **Desk-aware links**: record links navigate the Desk in place via `frappe.set_route`.
-- **Attachments**: paste (Ctrl+V), drag-drop, or pick — images and PDFs go inline as
-  base64 blocks (vision). Caps + friendly rejection notices.
+- **Attachments**: paste (Ctrl+V), drag-drop, or pick. Images and PDFs go inline as
+  base64 blocks (vision); **spreadsheets/docs (xlsx, csv, docx) are extracted to text/
+  markdown on the server** (SheetJS + mammoth) before the turn, so the model reads their
+  contents. Caps + friendly rejection notices.
 - **Multi-chat history** in `localStorage` (multi-tab-safe), browsable drawer, resume on
   reload; image previews persisted in **IndexedDB** so they survive a reload.
 - **Auto-reconnect** with backoff; operator-friendly "reconnecting…" — never a stack trace.

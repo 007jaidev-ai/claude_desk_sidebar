@@ -578,6 +578,20 @@ function ChatPanel({ url, onStatus, theme }) {
     const ATTACH_MAX_COUNT = 8;                  // files per message
     const ATTACH_MAX_TOTAL = 22 * 1024 * 1024;   // ~match the server's per-turn cap
 
+    // Spreadsheet/doc types the server extracts to text (see lib.mjs). Some
+    // browsers report an empty file.type for .csv/.xlsx, so we also map by
+    // extension and use that as the mediaType the server dispatches on.
+    const DOC_MIME = new Set([
+        "text/csv", "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]);
+    const EXT_MIME = {
+        csv: "text/csv",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+
     const flashReject = useCallback((msg) => {
         setRejectNote(msg);
         setTimeout(() => setRejectNote(""), 4000);
@@ -586,8 +600,11 @@ function ChatPanel({ url, onStatus, theme }) {
     const addFiles = useCallback((files) => {
         Array.from(files || []).forEach((file) => {
             const isImage = file.type.startsWith("image/");
-            const isPdf = file.type === "application/pdf";
-            if (!isImage && !isPdf) return flashReject(`"${file.name}" isn't an image or PDF.`);
+            const ext = (file.name?.split(".").pop() || "").toLowerCase();
+            const mediaType = file.type || EXT_MIME[ext] || "";
+            const isPdf = mediaType === "application/pdf";
+            const isDoc = isPdf || DOC_MIME.has(mediaType);
+            if (!isImage && !isDoc) return flashReject(`"${file.name}" isn't a supported file (image, PDF, or spreadsheet/doc).`);
             if (file.size > ATTACH_MAX_BYTES) return flashReject(`"${file.name}" is over 5 MB.`);
             const reader = new FileReader();
             reader.onload = () => {
@@ -601,9 +618,9 @@ function ChatPanel({ url, onStatus, theme }) {
                 if (used + file.size > ATTACH_MAX_TOTAL) return flashReject("Attachments too large for one message.");
                 setAttachments((prev) => prev.concat({
                     id: genId(),
-                    name: file.name || (isPdf ? "document.pdf" : "image.png"),
+                    name: file.name || (isImage ? "image.png" : isPdf ? "document.pdf" : "file"),
                     kind: isImage ? "image" : "document",
-                    mediaType: file.type,
+                    mediaType,
                     data,
                     dataUrl: isImage ? dataUrl : null,
                     size: file.size,
@@ -907,7 +924,7 @@ function ChatPanel({ url, onStatus, theme }) {
             ),
             h("div", { className: "sena-ai-composer" },
                 h("input", {
-                    type: "file", ref: fileInputRef, accept: "image/*,application/pdf",
+                    type: "file", ref: fileInputRef, accept: "image/*,application/pdf,.csv,.xlsx,.docx",
                     multiple: true, style: "display:none",
                     onChange: (event) => { addFiles(event.target.files); event.target.value = ""; },
                 }),

@@ -1,7 +1,20 @@
 // Unit tests for the chat server's pure helpers. Run: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { contextPreamble, toolLabel, buildUserContent } from "../lib.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import * as XLSX from "xlsx";
+import { contextPreamble, toolLabel, buildUserContent, extractAttachments } from "../lib.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Build a base64 xlsx from an array-of-arrays so tests don't need a fixture.
+function xlsxBase64(aoa, sheetName = "Sheet1") {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), sheetName);
+  return XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+}
 
 test("contextPreamble: empty when no context", () => {
   assert.equal(contextPreamble(null), "");
@@ -61,4 +74,71 @@ test("buildUserContent: drops unsupported types and empty data", () => {
 test("buildUserContent: substitutes placeholder text when prompt empty", () => {
   const content = buildUserContent("", [{ kind: "image", mediaType: "image/png", data: "AAAA" }]);
   assert.equal(content[0].text, "(see attached)");
+});
+
+test("buildUserContent: server-extracted text becomes a labeled text block", () => {
+  const content = buildUserContent("look", [{ kind: "text", name: "quote.xlsx", text: "| a | b |" }]);
+  assert.equal(content.length, 2);
+  assert.equal(content[1].type, "text");
+  assert.match(content[1].text, /Attached file "quote\.xlsx":/);
+  assert.match(content[1].text, /\| a \| b \|/);
+});
+
+test("extractAttachments: xlsx becomes a markdown table", async () => {
+  const data = xlsxBase64([["Model", "Margin"], ["Luxe 2B", 18], ["Luxe 3B", 21]], "Costing");
+  const out = await extractAttachments([
+    { kind: "document", name: "quote.xlsx", mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, "text");
+  assert.equal(out[0].data, undefined); // base64 dropped
+  assert.match(out[0].text, /### Costing/);
+  assert.match(out[0].text, /\| Model \| Margin \|/);
+  assert.match(out[0].text, /\| --- \| --- \|/);
+  assert.match(out[0].text, /\| Luxe 2B \| 18 \|/);
+});
+
+test("extractAttachments: csv becomes a markdown table", async () => {
+  const data = Buffer.from("a,b\n1,2\n3,4").toString("base64");
+  const out = await extractAttachments([{ kind: "document", name: "rows.csv", mediaType: "text/csv", data }]);
+  assert.match(out[0].text, /\| a \| b \|/);
+  assert.match(out[0].text, /\| 1 \| 2 \|/);
+});
+
+test("extractAttachments: docx becomes raw text", async () => {
+  const data = readFileSync(resolve(__dirname, "fixtures/sample.docx")).toString("base64");
+  const out = await extractAttachments([
+    { kind: "document", name: "letter.docx", mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data },
+  ]);
+  assert.equal(out[0].kind, "text");
+  assert.match(out[0].text, /Total margin on the Luxe models is 18 percent/);
+});
+
+test("extractAttachments: large sheet is row-capped with a truncation note", async () => {
+  const aoa = [["n"]];
+  for (let i = 1; i <= 1500; i++) aoa.push([i]);
+  const data = xlsxBase64(aoa);
+  const out = await extractAttachments([
+    { kind: "document", name: "big.xlsx", mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data },
+  ]);
+  // 1500 data rows + 1 header = 1501 rows; cap renders 1000, leaving 501.
+  assert.match(out[0].text, /truncated — 501 more row\(s\)/);
+  assert.ok(!out[0].text.includes("| 1200 |"));
+});
+
+test("extractAttachments: empty/unreadable file degrades to a placeholder, never throws", async () => {
+  const out = await extractAttachments([
+    { kind: "document", name: "broken.xlsx", mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data: "" },
+  ]);
+  assert.equal(out[0].kind, "text");
+  assert.match(out[0].text, /could not be read/);
+});
+
+test("extractAttachments: images and pdfs pass through untouched", async () => {
+  const atts = [
+    { kind: "image", name: "p.png", mediaType: "image/png", data: "AAAA" },
+    { kind: "document", name: "d.pdf", mediaType: "application/pdf", data: "BBBB" },
+  ];
+  const out = await extractAttachments(atts);
+  assert.deepEqual(out, atts);
 });
